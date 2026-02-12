@@ -1,5 +1,10 @@
 # Content Genius Skill for Claude Code
 
+[![npm version](https://badge.fury.io/js/%40thierryteisseire%2Fcgenius-skill.svg)](https://www.npmjs.com/package/@thierryteisseire/cgenius-skill)
+[![npm downloads](https://img.shields.io/npm/dm/@thierryteisseire/cgenius-skill.svg)](https://www.npmjs.com/package/@thierryteisseire/cgenius-skill)
+[![GitHub stars](https://img.shields.io/github/stars/thierryteisseire/cgenius-skill.svg)](https://github.com/thierryteisseire/cgenius-skill)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Complete AI-powered content creation and proposal generation system with shareable client questionnaires.
 
 ## Overview
@@ -31,11 +36,26 @@ The Content Genius skill brings professional content creation and proposal autom
 
 ## Installation
 
-```bash
-# Install the skill
-claude code skill install thierryteisseire/cgenius-skill
+### Via Claude Code (Recommended)
 
-# Or install from source
+```bash
+# Install from npm
+claude code skill install @thierryteisseire/cgenius-skill
+```
+
+### Via npm
+
+```bash
+# Global installation
+npm install -g @thierryteisseire/cgenius-skill
+
+# Or local installation
+npm install @thierryteisseire/cgenius-skill
+```
+
+### From Source
+
+```bash
 git clone https://github.com/thierryteisseire/cgenius-skill.git
 cd cgenius-skill
 claude code skill install .
