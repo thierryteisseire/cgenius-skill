@@ -1,0 +1,23 @@
+# Git files
+.git
+.gitignore
+
+# Development files
+node_modules/
+*.log
+npm-debug.log*
+.DS_Store
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+.temp/

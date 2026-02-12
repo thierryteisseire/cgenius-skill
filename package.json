@@ -1,0 +1,72 @@
+{
+  "name": "@thierryteisseire/cgenius-skill",
+  "version": "1.0.0",
+  "description": "Complete AI-powered content creation and proposal generation system with shareable client questionnaires for Claude Code",
+  "keywords": [
+    "claude-code",
+    "claude-skill",
+    "content-creation",
+    "ai-content",
+    "proposals",
+    "questionnaires",
+    "marketing",
+    "content-genius",
+    "ai-writing",
+    "automation"
+  ],
+  "main": "instructions.md",
+  "files": [
+    "skill.json",
+    "instructions.md",
+    "README.md",
+    "LICENSE",
+    "examples/**/*.md"
+  ],
+  "scripts": {
+    "test": "echo \"No tests specified\"",
+    "prepublishOnly": "node -e \"console.log('Publishing Content Genius skill...')\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thierryteisseire/cgenius-skill.git"
+  },
+  "homepage": "https://github.com/thierryteisseire/cgenius-skill#readme",
+  "bugs": {
+    "url": "https://github.com/thierryteisseire/cgenius-skill/issues"
+  },
+  "author": {
+    "name": "Thierry Teisseire",
+    "email": "thierry@epsimoai.com",
+    "url": "https://github.com/thierryteisseire"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "claudeCode": {
+    "skillVersion": "1.0",
+    "commands": [
+      "cgenius",
+      "cg",
+      "content"
+    ],
+    "categories": [
+      "productivity",
+      "business",
+      "content",
+      "marketing"
+    ],
+    "apis": [
+      "generate-text",
+      "blog-generate",
+      "ai-json",
+      "generate-proposal",
+      "pptx-generate",
+      "questionnaire",
+      "proposal-pipeline"
+    ]
+  }
+}
