@@ -1,0 +1,27 @@
+{
+  "name": "cgenius",
+  "version": "1.0.0",
+  "description": "Complete AI-powered content creation and proposal generation system with shareable client questionnaires",
+  "author": "Thierry Teisseire",
+  "repository": "https://github.com/thierryteisseire/cgenius-skill",
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "cgenius",
+      "description": "AI content creation and proposal generation",
+      "aliases": ["cg", "content"]
+    }
+  ],
+  "tags": [
+    "content-creation",
+    "proposals",
+    "questionnaires",
+    "marketing",
+    "ai-generation"
+  ],
+  "categories": [
+    "productivity",
+    "business",
+    "content"
+  ]
+}
