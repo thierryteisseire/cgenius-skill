@@ -18,6 +18,7 @@
   "files": [
     "skill.json",
     "instructions.md",
+    "SKILL.md",
     "README.md",
     "LICENSE",
     "examples/**/*.md"
