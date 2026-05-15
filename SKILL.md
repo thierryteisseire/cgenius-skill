@@ -20,16 +20,36 @@ CGENIUS_APPSYNC_API_KEY=<api_key>              # For GraphQL features
 
 ## Shared Helpers
 
-### EpsimoAI SSE Stream Consumer
-All streaming endpoints use EpsimoAI's cumulative SSE format. Each event contains the full response so far.
-
+### Domain Validation
 ```typescript
+const TRUSTED_DOMAINS = ['https://beta.cgenius.app', 'https://app.cgenius.app'];
 const API_BASE = process.env.CGENIUS_API_BASE_URL || 'https://beta.cgenius.app';
+if (!TRUSTED_DOMAINS.some(d => API_BASE.startsWith(d))) {
+  throw new Error(`Untrusted API domain: ${API_BASE}. Allowed: ${TRUSTED_DOMAINS.join(', ')}`);
+}
 const EPSIMO_TOKEN = process.env.CGENIUS_EPSIMO_TOKEN;
 const ASSISTANT_ID = process.env.CGENIUS_ASSISTANT_ID; // Required
 const APPSYNC_URL = process.env.CGENIUS_APPSYNC_URL;
 const APPSYNC_API_KEY = process.env.CGENIUS_APPSYNC_API_KEY;
 
+if (!EPSIMO_TOKEN) throw new Error('CGENIUS_EPSIMO_TOKEN is required');
+if (!ASSISTANT_ID) throw new Error('CGENIUS_ASSISTANT_ID is required');
+```
+
+### Authenticated Fetch
+```typescript
+function authHeaders(): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${EPSIMO_TOKEN}`,
+  };
+}
+```
+
+### EpsimoAI SSE Stream Consumer
+All streaming endpoints use EpsimoAI's cumulative SSE format. Each event contains the full response so far.
+
+```typescript
 async function consumeStream(response: Response): Promise<string> {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -60,6 +80,7 @@ async function consumeStream(response: Response): Promise<string> {
 }
 
 async function graphql(query: string, variables?: any) {
+  if (!APPSYNC_URL || !APPSYNC_API_KEY) throw new Error('CGENIUS_APPSYNC_URL and CGENIUS_APPSYNC_API_KEY required for this operation');
   const res = await fetch(APPSYNC_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': APPSYNC_API_KEY },
@@ -71,9 +92,10 @@ async function graphql(query: string, variables?: any) {
 }
 
 async function pollTask(taskId: string): Promise<any> {
+  if (!taskId || typeof taskId !== 'string') throw new Error('Valid taskId required');
   for (let i = 0; i < 100; i++) {
     await new Promise(r => setTimeout(r, 3000));
-    const res = await fetch(`${API_BASE}/api/blog-writer-v2/tasks/${taskId}`);
+    const res = await fetch(`${API_BASE}/api/blog-writer-v2/tasks/${encodeURIComponent(taskId)}`, { headers: authHeaders() });
     const task = await res.json();
     if (task.status === 'COMPLETE' || task.status === 'FAILED') return task;
   }
@@ -94,15 +116,16 @@ Options: `--size single|small|medium|big|huge`, `--tone <tone>`, `--words <numbe
 
 ```typescript
 async function blogGenerate(topic, options) {
+  if (!topic || topic.trim().length < 3) throw new Error('Topic must be at least 3 characters');
   const res = await fetch(`${API_BASE}/api/blog-writer-v2/tasks`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify({
       requestData: {
-        topic,
+        topic: topic.trim(),
         keywords: options.keywords || '',
         tone: options.tone || 'professional',
-        wordCount: parseInt(options.words) || 1500,
+        wordCount: Math.min(parseInt(options.words) || 1500, 10000),
         blogSize: options.size || 'medium',
         brandVoice: options.brandVoice || '',
         title: options.title || '',
@@ -111,6 +134,7 @@ async function blogGenerate(topic, options) {
       epsimoToken: EPSIMO_TOKEN,
     }),
   });
+  if (!res.ok) throw new Error(`Blog creation failed: ${res.status}`);
   const { taskId } = await res.json();
   const task = await pollTask(taskId);
   if (task.status === 'FAILED') throw new Error(task.error);
@@ -162,13 +186,14 @@ Generates a social post (title + body) via EpsimoAI streaming.
 
 ```typescript
 async function socialGenerate(message) {
+  if (!message || message.trim().length < 3) throw new Error('Message must be at least 3 characters');
   const res = await fetch(`${API_BASE}/api/ai-json`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ assistant_id: ASSISTANT_ID, epsimo_token: EPSIMO_TOKEN, userMessage: message }),
+    headers: authHeaders(),
+    body: JSON.stringify({ assistant_id: ASSISTANT_ID, epsimo_token: EPSIMO_TOKEN, userMessage: message.trim() }),
   });
+  if (!res.ok) throw new Error(`Social generation failed: ${res.status}`);
   const content = await consumeStream(res);
-  // Extract JSON from markdown code block
   const match = content.match(/```json\n([\s\S]*?)\n```/);
   return match ? JSON.parse(match[1]) : { body: content };
 }
@@ -181,16 +206,18 @@ async function socialGenerate(message) {
 #### `/cgenius email <topic>`
 ```typescript
 async function emailGenerate(topic) {
+  if (!topic || topic.trim().length < 3) throw new Error('Topic must be at least 3 characters');
   const res = await fetch(`${API_BASE}/api/generate-text`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify({
       assistant_id: ASSISTANT_ID,
       epsimo_token: EPSIMO_TOKEN,
-      thread_name: `Email - ${topic}`,
-      request_content: `Write a professional email about: ${topic}`,
+      thread_name: `Email - ${topic.trim()}`,
+      request_content: `Write a professional email about: ${topic.trim()}`,
     }),
   });
+  if (!res.ok) throw new Error(`Email generation failed: ${res.status}`);
   const data = await res.json();
   return data.content;
 }
@@ -203,19 +230,21 @@ async function emailGenerate(topic) {
 #### `/cgenius proposal <client_name> [--services <s>] [--budget <b>] [--duration <d>]`
 ```typescript
 async function proposalGenerate(clientName, options) {
+  if (!clientName || clientName.trim().length < 2) throw new Error('Client name required');
   const res = await fetch(`${API_BASE}/api/generate-proposal`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify({
       assistant_id: ASSISTANT_ID,
       epsimo_token: EPSIMO_TOKEN,
-      client_name: clientName,
+      client_name: clientName.trim(),
       services: options.services,
       budget: options.budget,
       campaign_duration: options.duration,
       objectives: 'Generate comprehensive proposal',
     }),
   });
+  if (!res.ok) throw new Error(`Proposal generation failed: ${res.status}`);
   return await consumeStream(res);
 }
 ```

@@ -1,6 +1,6 @@
 {
   "name": "@thierryteisseire/cgenius-skill",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Complete AI-powered content platform: blog generation, social media, proposals, content ideation, brand voice, publishing, video, and offer automation",
   "keywords": [
     "claude-code",
@@ -24,6 +24,7 @@
     "skill.json",
     "instructions.md",
     "SKILL.md",
+    "SECURITY.md",
     "README.md",
     "LICENSE",
     "examples/**/*.md"
