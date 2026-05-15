@@ -14,8 +14,8 @@ AI-powered content platform: blog generation, social media, proposals, content i
 CGENIUS_API_BASE_URL=https://beta.cgenius.app
 CGENIUS_EPSIMO_TOKEN=<your_epsimo_token>
 CGENIUS_ASSISTANT_ID=<your_assistant_id>
-CGENIUS_APPSYNC_URL=<appsync_endpoint>
-CGENIUS_APPSYNC_API_KEY=<api_key>
+CGENIUS_APPSYNC_URL=<appsync_endpoint>        # For GraphQL features
+CGENIUS_APPSYNC_API_KEY=<api_key>              # For GraphQL features
 ```
 
 ## Shared Helpers
@@ -26,7 +26,7 @@ All streaming endpoints use EpsimoAI's cumulative SSE format. Each event contain
 ```typescript
 const API_BASE = process.env.CGENIUS_API_BASE_URL || 'https://beta.cgenius.app';
 const EPSIMO_TOKEN = process.env.CGENIUS_EPSIMO_TOKEN;
-const ASSISTANT_ID = process.env.CGENIUS_ASSISTANT_ID || 'a3067fe2-e21b-42f7-bf3c-7d875d6cfdf5';
+const ASSISTANT_ID = process.env.CGENIUS_ASSISTANT_ID; // Required
 const APPSYNC_URL = process.env.CGENIUS_APPSYNC_URL;
 const APPSYNC_API_KEY = process.env.CGENIUS_APPSYNC_API_KEY;
 

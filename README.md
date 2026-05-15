@@ -43,9 +43,9 @@ Set these environment variables:
 # Required
 export CGENIUS_EPSIMO_TOKEN="your_token"
 export CGENIUS_API_BASE_URL="https://beta.cgenius.app"
-
-# Optional
 export CGENIUS_ASSISTANT_ID="your_assistant_id"
+
+# Optional (for GraphQL/publish features)
 export CGENIUS_APPSYNC_URL="your_appsync_endpoint"
 export CGENIUS_APPSYNC_API_KEY="your_api_key"
 ```
