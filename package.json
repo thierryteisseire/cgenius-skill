@@ -1,18 +1,23 @@
 {
   "name": "@thierryteisseire/cgenius-skill",
-  "version": "1.0.2",
-  "description": "Complete AI-powered content creation and proposal generation system with shareable client questionnaires for Claude Code",
+  "version": "2.0.0",
+  "description": "Complete AI-powered content platform: blog generation, social media, proposals, content ideation, brand voice, publishing, video, and offer automation",
   "keywords": [
     "claude-code",
     "claude-skill",
+    "kiro-skill",
     "content-creation",
     "ai-content",
+    "blog-generation",
     "proposals",
     "questionnaires",
     "marketing",
     "content-genius",
     "ai-writing",
-    "automation"
+    "automation",
+    "brand-voice",
+    "content-ideation",
+    "publishing"
   ],
   "main": "instructions.md",
   "files": [
@@ -25,7 +30,7 @@
   ],
   "scripts": {
     "test": "echo \"No tests specified\"",
-    "prepublishOnly": "node -e \"console.log('Publishing Content Genius skill...')\""
+    "prepublishOnly": "node -e \"console.log('Publishing Content Genius skill v2.0.0...')\""
   },
   "repository": {
     "type": "git",
@@ -42,13 +47,13 @@
   },
   "license": "MIT",
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=18.0.0"
   },
   "publishConfig": {
     "access": "public"
   },
   "claudeCode": {
-    "skillVersion": "1.0",
+    "skillVersion": "2.0",
     "commands": [
       "cgenius",
       "cg",
@@ -61,13 +66,16 @@
       "marketing"
     ],
     "apis": [
-      "generate-text",
-      "blog-generate",
+      "blog-writer-v2",
       "ai-json",
+      "generate-text",
       "generate-proposal",
+      "proposal-pipeline",
       "pptx-generate",
       "questionnaire",
-      "proposal-pipeline"
+      "content-ideation",
+      "offer-agent",
+      "remotion"
     ]
   }
 }
