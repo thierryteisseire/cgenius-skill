@@ -6,563 +6,312 @@ license: MIT
 
 # Content Genius Skill v2.0
 
-AI-powered content platform: blog generation, social media, proposals, content ideation, brand voice, publishing, video, and offer automation.
+AI-powered content creation and proposal generation system.
+
+## Installation
+
+```bash
+npx skills add thierryteisseire/cgenius-skill
+```
 
 ## Configuration
 
+Set these environment variables before using:
+
 ```bash
-CGENIUS_API_BASE_URL=https://beta.cgenius.app
-CGENIUS_EPSIMO_TOKEN=<your_epsimo_token>
-CGENIUS_ASSISTANT_ID=<your_assistant_id>
-CGENIUS_APPSYNC_URL=<appsync_endpoint>        # For GraphQL features
-CGENIUS_APPSYNC_API_KEY=<api_key>              # For GraphQL features
+export CGENIUS_API_BASE_URL="https://beta.cgenius.app"
+export CGENIUS_EPSIMO_TOKEN="your_token"
+export CGENIUS_ASSISTANT_ID="your_assistant_id"
+
+# Optional (for GraphQL/publish features)
+export CGENIUS_APPSYNC_URL="your_appsync_endpoint"
+export CGENIUS_APPSYNC_API_KEY="your_api_key"
 ```
 
-## Shared Helpers
-
-### Domain Validation
-```typescript
-const TRUSTED_DOMAINS = ['https://beta.cgenius.app', 'https://app.cgenius.app'];
-const API_BASE = process.env.CGENIUS_API_BASE_URL || 'https://beta.cgenius.app';
-if (!TRUSTED_DOMAINS.some(d => API_BASE.startsWith(d))) {
-  throw new Error(`Untrusted API domain: ${API_BASE}. Allowed: ${TRUSTED_DOMAINS.join(', ')}`);
-}
-const EPSIMO_TOKEN = process.env.CGENIUS_EPSIMO_TOKEN;
-const ASSISTANT_ID = process.env.CGENIUS_ASSISTANT_ID; // Required
-const APPSYNC_URL = process.env.CGENIUS_APPSYNC_URL;
-const APPSYNC_API_KEY = process.env.CGENIUS_APPSYNC_API_KEY;
-
-if (!EPSIMO_TOKEN) throw new Error('CGENIUS_EPSIMO_TOKEN is required');
-if (!ASSISTANT_ID) throw new Error('CGENIUS_ASSISTANT_ID is required');
-```
-
-### Authenticated Fetch
-```typescript
-function authHeaders(): Record<string, string> {
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${EPSIMO_TOKEN}`,
-  };
-}
-```
-
-### EpsimoAI SSE Stream Consumer
-All streaming endpoints use EpsimoAI's cumulative SSE format. Each event contains the full response so far.
-
-```typescript
-async function consumeStream(response: Response): Promise<string> {
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '', fullContent = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let end = buffer.indexOf('\n\n');
-    while (end !== -1) {
-      const block = buffer.slice(0, end);
-      buffer = buffer.slice(end + 2);
-      let data = '';
-      for (const line of block.split('\n'))
-        if (line.startsWith('data: ')) data = line.slice(6).trim();
-      if (data && data !== '[DONE]') {
-        try {
-          const msgs = JSON.parse(data);
-          for (const m of Array.isArray(msgs) ? msgs : [msgs])
-            if (m.type === 'ai' && m.content?.length > fullContent.length)
-              fullContent = m.content;
-        } catch {}
-      }
-      end = buffer.indexOf('\n\n');
-    }
-  }
-  return fullContent;
-}
-
-async function graphql(query: string, variables?: any) {
-  if (!APPSYNC_URL || !APPSYNC_API_KEY) throw new Error('CGENIUS_APPSYNC_URL and CGENIUS_APPSYNC_API_KEY required for this operation');
-  const res = await fetch(APPSYNC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': APPSYNC_API_KEY },
-    body: JSON.stringify({ query, variables }),
-  });
-  const { data, errors } = await res.json();
-  if (errors?.length) throw new Error(errors[0].message);
-  return data;
-}
-
-async function pollTask(taskId: string): Promise<any> {
-  if (!taskId || typeof taskId !== 'string') throw new Error('Valid taskId required');
-  for (let i = 0; i < 100; i++) {
-    await new Promise(r => setTimeout(r, 3000));
-    const res = await fetch(`${API_BASE}/api/blog-writer-v2/tasks/${encodeURIComponent(taskId)}`, { headers: authHeaders() });
-    const task = await res.json();
-    if (task.status === 'COMPLETE' || task.status === 'FAILED') return task;
-  }
-  throw new Error('Task timed out');
-}
-```
+Get your token from: https://beta.cgenius.app/settings/api-tokens
 
 ---
 
-## Commands
+## Available Commands
 
 ### 1. Blog Generation
 
-#### `/cgenius blog generate <topic> [options]`
-Creates a blog using the V2 async pipeline (RESEARCH → OUTLINE → WRITING → COMPLETE).
+| Command | Description |
+|---------|-------------|
+| `/cgenius blog generate <topic>` | Create blog via async pipeline (research → outline → write) |
+| `/cgenius blog list` | List all blogs |
+| `/cgenius blog status <taskId>` | Check task progress |
+| `/cgenius blog resume <taskId>` | Resume a paused task |
+| `/cgenius blog regenerate <taskId> <sectionIndex>` | Regenerate a specific section |
 
-Options: `--size single|small|medium|big|huge`, `--tone <tone>`, `--words <number>`, `--keywords <kw>`, `--brand-voice <voice>`, `--title <title>`
+**Options for `blog generate`:**
+- `--size single|small|medium|big|huge`
+- `--tone <tone>` (default: professional)
+- `--words <number>` (default: 1500, max: 10000)
+- `--keywords <comma-separated>`
+- `--brand-voice <voice>`
+- `--title <title>`
 
-```typescript
-async function blogGenerate(topic, options) {
-  if (!topic || topic.trim().length < 3) throw new Error('Topic must be at least 3 characters');
-  const res = await fetch(`${API_BASE}/api/blog-writer-v2/tasks`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({
-      requestData: {
-        topic: topic.trim(),
-        keywords: options.keywords || '',
-        tone: options.tone || 'professional',
-        wordCount: Math.min(parseInt(options.words) || 1500, 10000),
-        blogSize: options.size || 'medium',
-        brandVoice: options.brandVoice || '',
-        title: options.title || '',
-        assistantId: ASSISTANT_ID,
-      },
-      epsimoToken: EPSIMO_TOKEN,
-    }),
-  });
-  if (!res.ok) throw new Error(`Blog creation failed: ${res.status}`);
-  const { taskId } = await res.json();
-  const task = await pollTask(taskId);
-  if (task.status === 'FAILED') throw new Error(task.error);
-  return task.resultData.finalContent; // HTML
-}
+**Example:**
 ```
-
-#### `/cgenius blog list`
-```typescript
-async function blogList() {
-  return await graphql(`query { listBlogs(limit: 20) { items { id title createdAt } } }`);
-}
-```
-
-#### `/cgenius blog status <taskId>`
-```typescript
-async function blogStatus(taskId) {
-  const res = await fetch(`${API_BASE}/api/blog-writer-v2/tasks/${taskId}`);
-  return await res.json(); // { status, currentPhase, progress, resultData }
-}
-```
-
-#### `/cgenius blog resume <taskId>`
-```typescript
-async function blogResume(taskId) {
-  const res = await fetch(`${API_BASE}/api/blog-writer-v2/tasks/${taskId}/resume`, { method: 'POST' });
-  return await res.json();
-}
-```
-
-#### `/cgenius blog regenerate <taskId> <sectionIndex>`
-```typescript
-async function blogRegenerate(taskId, sectionIndex) {
-  const res = await fetch(`${API_BASE}/api/blog-writer-v2/tasks/${taskId}/regenerate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sectionIndex: parseInt(sectionIndex) }),
-  });
-  return await res.json();
-}
+/cgenius blog generate "How AI is changing B2B sales" --size medium --tone professional --keywords "AI, sales, automation"
 ```
 
 ---
 
 ### 2. Social Media
 
-#### `/cgenius social <message>`
-Generates a social post (title + body) via EpsimoAI streaming.
+| Command | Description |
+|---------|-------------|
+| `/cgenius social <message>` | Generate social post (title + body) |
 
-```typescript
-async function socialGenerate(message) {
-  if (!message || message.trim().length < 3) throw new Error('Message must be at least 3 characters');
-  const res = await fetch(`${API_BASE}/api/ai-json`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({ assistant_id: ASSISTANT_ID, epsimo_token: EPSIMO_TOKEN, userMessage: message.trim() }),
-  });
-  if (!res.ok) throw new Error(`Social generation failed: ${res.status}`);
-  const content = await consumeStream(res);
-  const match = content.match(/```json\n([\s\S]*?)\n```/);
-  return match ? JSON.parse(match[1]) : { body: content };
-}
+**Example:**
+```
+/cgenius social "Announce our new product launch for Q3"
 ```
 
 ---
 
 ### 3. Email
 
-#### `/cgenius email <topic>`
-```typescript
-async function emailGenerate(topic) {
-  if (!topic || topic.trim().length < 3) throw new Error('Topic must be at least 3 characters');
-  const res = await fetch(`${API_BASE}/api/generate-text`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({
-      assistant_id: ASSISTANT_ID,
-      epsimo_token: EPSIMO_TOKEN,
-      thread_name: `Email - ${topic.trim()}`,
-      request_content: `Write a professional email about: ${topic.trim()}`,
-    }),
-  });
-  if (!res.ok) throw new Error(`Email generation failed: ${res.status}`);
-  const data = await res.json();
-  return data.content;
-}
+| Command | Description |
+|---------|-------------|
+| `/cgenius email <topic>` | Generate professional email content |
+
+**Example:**
+```
+/cgenius email "Follow up after demo meeting with Acme Corp"
 ```
 
 ---
 
-### 4. Proposal
+### 4. Proposals
 
-#### `/cgenius proposal <client_name> [--services <s>] [--budget <b>] [--duration <d>]`
-```typescript
-async function proposalGenerate(clientName, options) {
-  if (!clientName || clientName.trim().length < 2) throw new Error('Client name required');
-  const res = await fetch(`${API_BASE}/api/generate-proposal`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({
-      assistant_id: ASSISTANT_ID,
-      epsimo_token: EPSIMO_TOKEN,
-      client_name: clientName.trim(),
-      services: options.services,
-      budget: options.budget,
-      campaign_duration: options.duration,
-      objectives: 'Generate comprehensive proposal',
-    }),
-  });
-  if (!res.ok) throw new Error(`Proposal generation failed: ${res.status}`);
-  return await consumeStream(res);
-}
+| Command | Description |
+|---------|-------------|
+| `/cgenius proposal <client_name>` | Generate commercial proposal (streaming) |
+| `/cgenius proposal-pipeline <client_name>` | Full 3-stage async pipeline |
+
+**Options for `proposal`:**
+- `--services <services>`
+- `--budget <budget>`
+- `--duration <duration>`
+
+**Options for `proposal-pipeline`:**
+- `--industry <industry>`
+- `--goals <goals>`
+- `--budget <budget>`
+- `--timeline <timeline>`
+- `--services <services>`
+
+**Example:**
 ```
-
-#### `/cgenius proposal-pipeline <client_name> [options]`
-Options: `--industry`, `--goals`, `--budget`, `--timeline`, `--services`
-
-```typescript
-async function proposalPipeline(clientName, options) {
-  const res = await fetch(`${API_BASE}/api/proposal-pipeline`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_name: clientName,
-      epsimo_token: EPSIMO_TOKEN,
-      assistant_id: ASSISTANT_ID,
-      industry: options.industry,
-      goals: options.goals,
-      budget: options.budget,
-      timeline: options.timeline,
-      services: options.services,
-    }),
-  });
-  return await res.json();
-}
+/cgenius proposal "Acme Corp" --services "SEO, Content Marketing" --budget "50k"
+/cgenius proposal-pipeline "Acme Corp" --industry "SaaS" --budget "100k" --timeline "6 months"
 ```
 
 ---
 
 ### 5. Content Ideation
 
-#### `/cgenius ideate create <topic> [--priority high|medium|low]`
-```typescript
-async function ideateCreate(topic, options) {
-  const res = await fetch(`${API_BASE}/api/content-ideation`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ topic, priority: options.priority || 'medium', status: 'new' }),
-  });
-  return await res.json();
-}
-```
+| Command | Description |
+|---------|-------------|
+| `/cgenius ideate create <topic>` | Create a new content idea |
+| `/cgenius ideate list` | List ideas |
+| `/cgenius ideate analyze <id>` | Analyze an idea |
+| `/cgenius ideate generate <id>` | Generate content from idea |
 
-#### `/cgenius ideate list [--status new|analyzing|ready|published]`
-```typescript
-async function ideateList(options) {
-  const params = new URLSearchParams();
-  if (options.status) params.set('status', options.status);
-  const res = await fetch(`${API_BASE}/api/content-ideation?${params}`);
-  return await res.json();
-}
-```
+**Options:**
+- `--priority high|medium|low`
+- `--status new|analyzing|ready|published` (for list)
+- `--type blog|social|email` (for generate)
 
-#### `/cgenius ideate analyze <id>`
-```typescript
-async function ideateAnalyze(id) {
-  const res = await fetch(`${API_BASE}/api/content-ideation/analyze`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ideationId: id }),
-  });
-  return await res.json();
-}
+**Example:**
 ```
-
-#### `/cgenius ideate generate <id> [--type blog|social|email]`
-```typescript
-async function ideateGenerate(id, options) {
-  const res = await fetch(`${API_BASE}/api/content-ideation/${id}/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: options.type || 'blog' }),
-  });
-  return await res.json();
-}
+/cgenius ideate create "SaaS marketing trends 2026" --priority high
+/cgenius ideate generate abc123 --type blog
 ```
 
 ---
 
 ### 6. Brand Voice
 
-#### `/cgenius brand-voice create <name> [--tone <tone>] [--description <desc>]`
-```typescript
-async function brandVoiceCreate(name, options) {
-  return await graphql(`mutation CreateBrandVoice($input: CreateBrandVoiceInput!) {
-    createBrandVoice(input: $input) { id name tone description createdAt }
-  }`, { input: { name, tone: options.tone || '', description: options.description || '' } });
-}
-```
+| Command | Description |
+|---------|-------------|
+| `/cgenius brand-voice create <name>` | Create brand voice profile |
+| `/cgenius brand-voice list` | List all brand voices |
 
-#### `/cgenius brand-voice list`
-```typescript
-async function brandVoiceList() {
-  return await graphql(`query { listBrandVoices(limit: 50) { items { id name tone description } } }`);
-}
+**Options for `create`:**
+- `--tone <tone>`
+- `--description <description>`
+
+**Example:**
+```
+/cgenius brand-voice create "Corporate Friendly" --tone "warm, professional" --description "Used for client communications"
 ```
 
 ---
 
 ### 7. Offer Agent
 
-#### `/cgenius offer create <client_name> [--subjects <comma-separated>]`
-Triggers the batch offer agent (async via Trigger.dev).
+| Command | Description |
+|---------|-------------|
+| `/cgenius offer create <client_name>` | Trigger batch offer agent (async) |
+| `/cgenius offer research <client_name>` | Research-based offer generation |
 
-```typescript
-async function offerCreate(clientName, options) {
-  const subjects = (options.subjects || 'Market Analysis,Client Context,Competitor Analysis,Offer Components').split(',');
-  const res = await fetch(`${API_BASE}/api/offer-agent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_name: clientName,
-      subjects,
-      assistant_id: ASSISTANT_ID,
-      epsimo_token: EPSIMO_TOKEN,
-    }),
-  });
-  return await res.json(); // { id, publicAccessToken }
-}
+**Options:**
+- `--subjects <comma-separated>` (default: Market Analysis, Client Context, Competitor Analysis, Offer Components)
+- `--industry <industry>` (for research)
+
+**Example:**
 ```
-
-#### `/cgenius offer research <client_name> [--industry <industry>]`
-```typescript
-async function offerResearch(clientName, options) {
-  const res = await fetch(`${API_BASE}/api/new-offer-agent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_name: clientName,
-      industry: options.industry,
-      assistant_id: ASSISTANT_ID,
-      epsimo_token: EPSIMO_TOKEN,
-    }),
-  });
-  return await res.json();
-}
+/cgenius offer create "TechStartup Inc" --subjects "Market Analysis,Competitor Analysis"
+/cgenius offer research "TechStartup Inc" --industry "fintech"
 ```
 
 ---
 
 ### 8. Questionnaire
 
-#### `/cgenius questionnaire create <client_name> [--email <e>] [--expires <days>] [--notify <email>]`
-```typescript
-async function questionnaireCreate(clientName, options) {
-  const res = await fetch(`${API_BASE}/api/questionnaire/create-token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_name: clientName,
-      client_email: options.email,
-      expires_days: parseInt(options.expires) || 30,
-      notify_email: options.notify,
-    }),
-  });
-  return await res.json(); // { token, url, shortUrl, qrCode, expiresAt }
-}
-```
+| Command | Description |
+|---------|-------------|
+| `/cgenius questionnaire create <client_name>` | Create shareable client intake form |
+| `/cgenius questionnaire list` | List all questionnaires |
+| `/cgenius questionnaire status <token>` | Check completion status |
 
-#### `/cgenius questionnaire list`
-```typescript
-async function questionnaireList() {
-  const res = await fetch(`${API_BASE}/api/questionnaire/create-token`);
-  return await res.json();
-}
-```
+**Options for `create`:**
+- `--email <client_email>`
+- `--expires <days>` (default: 30)
+- `--notify <email>` (notification on completion)
 
-#### `/cgenius questionnaire status <token>`
-```typescript
-async function questionnaireStatus(token) {
-  const res = await fetch(`${API_BASE}/api/questionnaire/${token}`);
-  return await res.json();
-}
+**Returns:** Shareable URL, short URL, QR code, expiration date.
+
+**Example:**
+```
+/cgenius questionnaire create "Acme Corp" --email "contact@acme.com" --expires 14 --notify "me@agency.com"
 ```
 
 ---
 
 ### 9. Publish / Schedule
 
-#### `/cgenius publish schedule <contentId> --platform <platform> --date <date>`
-Platforms: `blog`, `social`, `email`, `newsletter`
+| Command | Description |
+|---------|-------------|
+| `/cgenius publish schedule <contentId>` | Schedule content for publication |
+| `/cgenius publish list` | List scheduled publications |
 
-```typescript
-async function publishSchedule(contentId, options) {
-  return await graphql(`mutation CreatePublicationSchedule($input: CreatePublicationScheduleInput!) {
-    createPublicationSchedule(input: $input) { id contentId platform publishDate status }
-  }`, { input: { contentId, platform: options.platform, publishDate: options.date, status: 'scheduled' } });
-}
+**Options for `schedule`:**
+- `--platform blog|social|email|newsletter` (required)
+- `--date <YYYY-MM-DD>` (required)
+
+**Options for `list`:**
+- `--status draft|scheduled|published|failed`
+
+**Example:**
 ```
-
-#### `/cgenius publish list [--status draft|scheduled|published|failed]`
-```typescript
-async function publishList(options) {
-  const filter = options.status ? `filter: { status: { eq: "${options.status}" } }` : '';
-  return await graphql(`query { listPublicationSchedules(limit: 50 ${filter ? ',' + filter : ''}) {
-    items { id contentId platform publishDate status publishedAt } } }`);
-}
+/cgenius publish schedule content-123 --platform blog --date 2026-06-01
+/cgenius publish list --status scheduled
 ```
 
 ---
 
 ### 10. Presentation (PPTX)
 
-#### `/cgenius pptx <topic> [--slides <number>]`
-```typescript
-async function pptxGenerate(topic, options) {
-  const res = await fetch(`${API_BASE}/api/pptx-generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      assistant_id: ASSISTANT_ID,
-      epsimo_token: EPSIMO_TOKEN,
-      topic,
-      slides: parseInt(options.slides) || 10,
-    }),
-  });
-  return await res.json(); // { url }
-}
+| Command | Description |
+|---------|-------------|
+| `/cgenius pptx <topic>` | Generate PowerPoint presentation |
+
+**Options:**
+- `--slides <number>` (default: 10)
+
+**Example:**
+```
+/cgenius pptx "Q3 Marketing Strategy" --slides 12
 ```
 
 ---
 
 ### 11. Video
 
-#### `/cgenius video render <timeline_json>`
-```typescript
-async function videoRender(timelineJson) {
-  const timeline = JSON.parse(timelineJson);
-  const res = await fetch(`${API_BASE}/api/remotion/render`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(timeline),
-  });
-  return await res.json(); // { url, renderId }
-}
-```
+| Command | Description |
+|---------|-------------|
+| `/cgenius video render <timeline_json>` | Render video via Remotion |
+| `/cgenius video list` | List rendered videos |
 
-#### `/cgenius video list`
-```typescript
-async function videoList() {
-  const res = await fetch(`${API_BASE}/api/remotion/files`);
-  return await res.json();
-}
+**Example:**
+```
+/cgenius video render '{"scenes": [...]}'
 ```
 
 ---
 
 ### 12. Document
 
-#### `/cgenius document <topic> [--type report|brief|memo]`
-```typescript
-async function documentGenerate(topic, options) {
-  const type = options.type || 'report';
-  const res = await fetch(`${API_BASE}/api/generate-text`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      assistant_id: ASSISTANT_ID,
-      epsimo_token: EPSIMO_TOKEN,
-      thread_name: `Document - ${topic}`,
-      request_content: `Create a professional ${type} about: ${topic}`,
-    }),
-  });
-  const data = await res.json();
-  return data.content;
-}
+| Command | Description |
+|---------|-------------|
+| `/cgenius document <topic>` | Generate professional document |
+
+**Options:**
+- `--type report|brief|memo` (default: report)
+
+**Example:**
+```
+/cgenius document "Market expansion analysis for EMEA" --type report
 ```
 
 ---
 
 ### 13. Analytics
 
-#### `/cgenius analytics seo`
-```typescript
-async function analyticsSeo() {
-  return await graphql(`query { listBlogs(limit: 50) { items { id title createdAt updatedAt } } }`);
-}
-```
+| Command | Description |
+|---------|-------------|
+| `/cgenius analytics seo` | SEO performance data |
+| `/cgenius analytics social` | Social media analytics |
 
-#### `/cgenius analytics social`
-```typescript
-async function analyticsSocial() {
-  return await graphql(`query { listPublicationSchedules(filter: { platform: { eq: "social" } }, limit: 50) {
-    items { id contentId publishDate status publishedAt } } }`);
-}
+---
+
+## API Endpoints Reference
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/blog-writer-v2/tasks` | POST | Create blog task |
+| `/api/blog-writer-v2/tasks/:id` | GET | Get task status |
+| `/api/blog-writer-v2/tasks/:id/resume` | POST | Resume task |
+| `/api/blog-writer-v2/tasks/:id/regenerate` | POST | Regenerate section |
+| `/api/ai-json` | POST | Social post generation (SSE stream) |
+| `/api/generate-text` | POST | Email/document generation |
+| `/api/generate-proposal` | POST | Proposal generation (SSE stream) |
+| `/api/proposal-pipeline` | POST | Proposal pipeline |
+| `/api/content-ideation` | GET/POST | Content ideation CRUD |
+| `/api/content-ideation/analyze` | POST | Analyze idea |
+| `/api/content-ideation/:id/generate` | POST | Generate from idea |
+| `/api/offer-agent` | POST | Offer agent |
+| `/api/new-offer-agent` | POST | Research offer agent |
+| `/api/questionnaire/create-token` | GET/POST | Questionnaire management |
+| `/api/questionnaire/:token` | GET | Questionnaire status |
+| `/api/pptx-generate` | POST | PPTX generation |
+| `/api/remotion/render` | POST | Video render |
+| `/api/remotion/files` | GET | List videos |
+
+**Authentication:** All API calls require `Authorization: Bearer <CGENIUS_EPSIMO_TOKEN>` header.
+
+**Streaming:** Proposal and social endpoints use SSE (Server-Sent Events) with EpsimoAI's cumulative format — each event contains the full response so far.
+
+---
+
+## Error Handling
+
+If credentials are missing:
+```
+❌ CGENIUS_EPSIMO_TOKEN is not set.
+Fix: Get your token from https://beta.cgenius.app/settings/api-tokens
+     Then: export CGENIUS_EPSIMO_TOKEN="your_token"
 ```
 
 ---
 
-## Usage Instructions
+## Links
 
-When the user invokes `/cgenius`:
-
-1. **Parse command** — identify the operation from the first argument
-2. **Check credentials** — verify `CGENIUS_EPSIMO_TOKEN` is set for API calls, `CGENIUS_APPSYNC_URL` + `CGENIUS_APPSYNC_API_KEY` for GraphQL
-3. **Gather missing info** — ask user for required fields not provided
-4. **Execute** — call the appropriate function
-5. **Format response** — present results clearly in markdown
-6. **Handle errors** — show helpful messages with fix instructions
-
-## Error Handling
-
-```markdown
-## ❌ Error: Missing Credentials
-
-CGENIUS_EPSIMO_TOKEN is not set.
-
-### Fix:
-1. Get your token from: https://beta.cgenius.app/settings/api-tokens
-2. Set: `export CGENIUS_EPSIMO_TOKEN="your_token"`
-```
-
-## Response Formatting
-
-- **Blog:** Show HTML content or link to view
-- **Social:** Show `{ title, body }` formatted
-- **Email:** Show subject + body
-- **Proposal:** Show sections as they complete
-- **Questionnaire:** Show shareable URL + QR code link
-- **Task status:** Show phase + progress bar
-- **Lists:** Show as tables with key fields
+- **App:** https://beta.cgenius.app
+- **GitHub:** https://github.com/thierryteisseire/cgenius-skill
+- **API Tokens:** https://beta.cgenius.app/settings/api-tokens
